@@ -1,0 +1,77 @@
+name: Bug Report
+description: Report a bug in the swarm CLI
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Please fill in as much detail as possible.
+        **Redact any API keys or secrets before submitting.**
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run: swarm run my-team.yaml --provider mock
+        2. See error: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: yaml
+    attributes:
+      label: YAML file
+      description: Paste the SwarmTeam/SwarmAgent YAML. Redact secrets.
+      render: yaml
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Full terminal output
+      render: shell
+
+  - type: input
+    id: swarm-version
+    attributes:
+      label: swarm version
+      description: "`swarm version` or `go version -m $(which swarm)`"
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: "`go version`"
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / architecture
+      placeholder: "macOS 15 arm64 / Ubuntu 24.04 amd64"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: coc
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I have read and agree to the [Code of Conduct](https://github.com/kubeswarm/kubeswarm/blob/main/CODE_OF_CONDUCT.md)
+          required: true

@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOWORK_CONTENT: |
+    go 1.26.2
+
+    use (
+      ./kubeswarm
+      ./kubeswarm/runtime
+      ./kubeswarm-cli
+    )
+
+    replace (
+      github.com/kubeswarm/kubeswarm v0.0.0-dev => ./kubeswarm
+      github.com/kubeswarm/kubeswarm/runtime v0.0.0-dev => ./kubeswarm/runtime
+      github.com/kubeswarm/kubeswarm-cli v0.0.0-dev => ./kubeswarm-cli
+    )
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: kubeswarm-cli
+      - uses: actions/checkout@v6
+        with:
+          repository: kubeswarm/kubeswarm
+          path: kubeswarm
+      - name: Create go.work
+        run: echo "$GOWORK_CONTENT" > go.work
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: kubeswarm-cli/go.mod
+      - name: Download modules
+        run: go mod download
+        working-directory: kubeswarm-cli
+      - name: Verify dependencies
+        run: make -C kubeswarm-cli verify
+      - name: Run tests
+        run: make -C kubeswarm-cli test
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: kubeswarm-cli
+      - uses: actions/checkout@v6
+        with:
+          repository: kubeswarm/kubeswarm
+          path: kubeswarm
+      - name: Create go.work
+        run: echo "$GOWORK_CONTENT" > go.work
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: kubeswarm-cli/go.mod
+      - name: Download modules
+        run: go mod download
+        working-directory: kubeswarm-cli
+      - name: Run linter
+        run: make -C kubeswarm-cli lint
+
+  scan-secrets:
+    name: Scan Secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Install trufflehog
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+            | sh -s -- -b /usr/local/bin v3.88.2
+      - name: Scan for secrets
+        run: trufflehog git "file://$(pwd)" --only-verified --fail --no-update

@@ -1,0 +1,177 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOWORK_CONTENT: |
+    go 1.26.2
+
+    use (
+      ./kubeswarm
+      ./kubeswarm/runtime
+      ./kubeswarm-cli
+    )
+
+    replace (
+      github.com/kubeswarm/kubeswarm v0.0.0-dev => ./kubeswarm
+      github.com/kubeswarm/kubeswarm/runtime v0.0.0-dev => ./kubeswarm/runtime
+      github.com/kubeswarm/kubeswarm-cli v0.0.0-dev => ./kubeswarm-cli
+    )
+
+jobs:
+  build-binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ""
+          - goos: linux
+            goarch: arm64
+            ext: ""
+          - goos: darwin
+            goarch: amd64
+            ext: ""
+          - goos: darwin
+            goarch: arm64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: kubeswarm-cli
+      - uses: actions/checkout@v6
+        with:
+          repository: kubeswarm/kubeswarm
+          path: kubeswarm
+      - name: Create go.work
+        run: echo "$GOWORK_CONTENT" > go.work
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: kubeswarm-cli/go.mod
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        working-directory: kubeswarm-cli
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          OUTPUT="dist/swarm-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          go build -ldflags "-s -w -X main.version=${VERSION}" -o "${OUTPUT}" ./cmd/swarm
+
+      - name: Generate checksum
+        working-directory: kubeswarm-cli
+        run: |
+          cd dist
+          sha256sum swarm-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} > swarm-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: swarm-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: kubeswarm-cli/dist/
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-binaries]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: swarm-*
+          merge-multiple: true
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            LOG=$(git log --oneline)
+          else
+            LOG=$(git log --oneline "${PREV_TAG}..HEAD")
+          fi
+          {
+            echo "changelog<<EOF"
+            echo "$LOG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "${{ steps.changelog.outputs.changelog }}" \
+            dist/swarm-*
+
+  update-homebrew:
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: swarm-*
+          merge-multiple: true
+
+      - name: Compute checksums
+        id: checksums
+        run: |
+          echo "darwin_arm64=$(sha256sum dist/swarm-darwin-arm64 | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "darwin_amd64=$(sha256sum dist/swarm-darwin-amd64 | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64=$(sha256sum dist/swarm-linux-arm64 | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "linux_amd64=$(sha256sum dist/swarm-linux-amd64 | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v6
+        with:
+          repository: kubeswarm/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        env:
+          TAG: ${{ github.ref_name }}
+          SHA_DARWIN_ARM64: ${{ steps.checksums.outputs.darwin_arm64 }}
+          SHA_DARWIN_AMD64: ${{ steps.checksums.outputs.darwin_amd64 }}
+          SHA_LINUX_ARM64: ${{ steps.checksums.outputs.linux_arm64 }}
+          SHA_LINUX_AMD64: ${{ steps.checksums.outputs.linux_amd64 }}
+        run: |
+          CLEAN_VERSION="${TAG#v}"
+          F="homebrew-tap/Formula/swarm.rb"
+          sed -i "s|version \".*\"|version \"${CLEAN_VERSION}\"|" "$F"
+          sed -i "s|download/v[^/]*/swarm-|download/${TAG}/swarm-|g" "$F"
+          sed -i "/swarm-darwin-arm64/{n;s|sha256 \".*\"|sha256 \"${SHA_DARWIN_ARM64}\"|;}" "$F"
+          sed -i "/swarm-darwin-amd64/{n;s|sha256 \".*\"|sha256 \"${SHA_DARWIN_AMD64}\"|;}" "$F"
+          sed -i "/swarm-linux-arm64/{n;s|sha256 \".*\"|sha256 \"${SHA_LINUX_ARM64}\"|;}" "$F"
+          sed -i "/swarm-linux-amd64/{n;s|sha256 \".*\"|sha256 \"${SHA_LINUX_AMD64}\"|;}" "$F"
+
+      - name: Commit and push
+        run: |
+          cd homebrew-tap
+          git config user.name "kubeswarm-bot"
+          git config user.email "bot@kubeswarm.io"
+          git add Formula/swarm.rb
+          git commit -m "Update swarm to ${{ github.ref_name }}"
+          git push
