@@ -61,9 +61,9 @@ import (
 	"github.com/kubeswarm/kubeswarm/pkg/flow"
 	"github.com/kubeswarm/kubeswarm/pkg/observability"
 	"github.com/kubeswarm/kubeswarm/pkg/validation"
-	_ "github.com/kubeswarm/kubeswarm/runtime/providers/anthropic"
-	_ "github.com/kubeswarm/kubeswarm/runtime/providers/gemini"
-	_ "github.com/kubeswarm/kubeswarm/runtime/providers/openai"
+	_ "github.com/kubeswarm/kubeswarm/runtime/pkg/providers/anthropic"
+	_ "github.com/kubeswarm/kubeswarm/runtime/pkg/providers/gemini"
+	_ "github.com/kubeswarm/kubeswarm/runtime/pkg/providers/openai"
 )
 
 // version is set at build time via -ldflags "-X main.version=<tag>".
