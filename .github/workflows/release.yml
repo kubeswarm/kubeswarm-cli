@@ -47,10 +47,10 @@ jobs:
             goarch: amd64
             ext: ".exe"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: kubeswarm-cli
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: kubeswarm/kubeswarm
           path: kubeswarm
@@ -90,7 +90,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -145,7 +145,7 @@ jobs:
           echo "linux_amd64=$(sha256sum dist/swarm-linux-amd64 | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout homebrew-tap
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: kubeswarm/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
