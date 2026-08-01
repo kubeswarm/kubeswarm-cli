@@ -40,7 +40,7 @@ jobs:
           path: kubeswarm
       - name: Create go.work
         run: echo "$GOWORK_CONTENT" > go.work
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: kubeswarm-cli/go.mod
       - name: Download modules
@@ -64,7 +64,7 @@ jobs:
           path: kubeswarm
       - name: Create go.work
         run: echo "$GOWORK_CONTENT" > go.work
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: kubeswarm-cli/go.mod
       - name: Download modules
